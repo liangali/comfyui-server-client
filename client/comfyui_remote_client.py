@@ -20,6 +20,22 @@ from typing import Any
 DEFAULT_PORT = 8188
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent / "remote_outputs"
 
+# LAN ComfyUI must be reached directly. Corporate HTTP_PROXY (e.g. proxy-ir.intel.com)
+# often returns a 403 HTML policy page for private IPs like 10.x, which urllib would
+# otherwise honor via getproxies() / env. Empty ProxyHandler disables that.
+_NO_PROXY_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+def _proxy_hint(base: str) -> str:
+    proxies = urllib.request.getproxies()
+    http_proxy = proxies.get("http") or proxies.get("HTTP") or ""
+    if not http_proxy:
+        return ""
+    return (
+        f" Detected HTTP proxy {http_proxy}; these scripts bypass it for LAN. "
+        f'For curl use: curl --noproxy "*" {base}/system_stats'
+    )
+
 
 class ComfyRemoteClient:
     """HTTP client for a remote ComfyUI server (scheme A / LAN)."""
@@ -39,8 +55,28 @@ class ComfyRemoteClient:
         self.server = server
         self.client_id = client_id or str(uuid.uuid4())
         self.base = f"http://{self.server}"
+        self._opener = _NO_PROXY_OPENER
 
     # ------------------------------------------------------------------ HTTP
+    def _open(self, req: urllib.request.Request | str, timeout: float):
+        return self._opener.open(req, timeout=timeout)
+
+    @staticmethod
+    def _parse_json_body(raw: bytes, *, method: str, path: str) -> dict:
+        if not raw:
+            return {}
+        text = raw.decode("utf-8", errors="replace")
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as e:
+            snippet = text[:300].replace("\n", " ")
+            raise RuntimeError(
+                f"Expected JSON from {method} {path}, got non-JSON "
+                f"({len(raw)} bytes, starts with: {snippet!r}). "
+                "Often caused by an HTTP proxy returning an HTML block page; "
+                "this client bypasses proxies — check firewall / --server IP."
+            ) from e
+
     def http_json(self, method: str, path: str, data: Any = None, timeout: float = 3600) -> dict:
         url = f"{self.base}{path}"
         body = None if data is None else json.dumps(data).encode("utf-8")
@@ -48,11 +84,8 @@ class ComfyRemoteClient:
         if body is not None:
             req.add_header("Content-Type", "application/json")
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                raw = resp.read()
-                if not raw:
-                    return {}
-                return json.loads(raw.decode("utf-8"))
+            with self._open(req, timeout=timeout) as resp:
+                return self._parse_json_body(resp.read(), method=method, path=path)
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")[:2000]
             raise RuntimeError(f"HTTP {e.code} {method} {path}: {detail}") from e
@@ -65,7 +98,7 @@ class ComfyRemoteClient:
     def http_bytes(self, path: str, timeout: float = 3600) -> bytes:
         url = f"{self.base}{path}"
         try:
-            with urllib.request.urlopen(url, timeout=timeout) as resp:
+            with self._open(url, timeout=timeout) as resp:
                 return resp.read()
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")[:1000]
@@ -75,12 +108,16 @@ class ComfyRemoteClient:
 
     def wait_ready(self, timeout: float = 120) -> bool:
         t0 = time.time()
+        last_err: Exception | None = None
         while time.time() - t0 < timeout:
             try:
                 self.http_json("GET", "/system_stats", timeout=5)
                 return True
-            except Exception:
+            except Exception as e:
+                last_err = e
                 time.sleep(2)
+        if last_err is not None:
+            self._last_ready_error = last_err
         return False
 
     def system_stats(self) -> dict:
@@ -137,7 +174,7 @@ class ComfyRemoteClient:
             headers={"Content-Type": f"multipart/form-data; boundary={boundary}"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=600) as resp:
+            with self._open(req, timeout=600) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             detail = e.read().decode("utf-8", errors="replace")[:2000]
@@ -322,9 +359,13 @@ def connect_from_args(args: argparse.Namespace) -> ComfyRemoteClient:
     client = ComfyRemoteClient(server)
     print(f"ComfyUI server: {client.base}")
     if not client.wait_ready(timeout=getattr(args, "ready_timeout", 60)):
+        detail = getattr(client, "_last_ready_error", None)
+        extra = f" Last error: {detail}" if detail else ""
+        proxy_note = _proxy_hint(client.base)
         raise SystemExit(
             f"ComfyUI not reachable at {client.base}. "
             "On the B70 machine run start_comfyui_remote.bat and allow TCP 8188 in firewall."
+            f"{proxy_note}{extra}"
         )
     try:
         stats = client.system_stats()
