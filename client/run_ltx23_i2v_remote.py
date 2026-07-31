@@ -20,7 +20,8 @@ Three deliberate deviations from the template:
     defaults that switch off anyway; enabling it costs an extra LLM pass per run.
   * The template's helper nodes (PrimitiveInt / ComfyMathExpression) are constant
     folded: base latent is (width/2, height/2), upsampled x2 by the spatial
-    upscaler in the refine pass, and length = duration * fps + 1.
+    upscaler in the refine pass, and the frame count comes from duration * fps
+    snapped to the 8k+1 grid LTX actually produces.
 
 Serial by design: ComfyUI runs one prompt at a time, and this script waits for
 the job to finish before returning.
@@ -107,7 +108,7 @@ def build_prompt(
 ) -> dict:
     """Flatten video_ltx2_3_i2v.json into an API-format prompt graph."""
     base_w, base_h = width // 2, height // 2
-    length = int(round(duration * fps)) + 1
+    length = snap_length(duration, fps)
     g: dict = {}
 
     # ---- loaders -------------------------------------------------------
@@ -272,6 +273,16 @@ def snap64(v: int) -> int:
     return max(64, int(round(v / 64)) * 64)
 
 
+def snap_length(duration: float, fps: int) -> int:
+    """Frame count LTX will actually produce for `duration` seconds.
+
+    Temporal compression is 8, so the length lands on 8k+1 and anything else is
+    floored: 5s @25fps is 126 frames on paper but comes back as 121 (4.84s).
+    Compute the real number up front so the log, filename and meta match.
+    """
+    return max(1, int(duration * fps) // 8) * 8 + 1
+
+
 def pick_primary_video(saved: list[Path]) -> Path | None:
     vids = [p for p in saved if p.suffix.lower() in VIDEO_SUFFIXES]
     return vids[0] if vids else (saved[0] if saved else None)
@@ -327,7 +338,13 @@ def main() -> None:
     if (width, height) != (args.width, args.height):
         print(f"note: {args.width}x{args.height} -> {width}x{height} "
               "(LTX needs multiples of 64; the base pass is half resolution)")
-    length = int(round(args.duration * args.fps)) + 1
+    # Same story along the time axis: temporal compression is 8, so the frame
+    # count lands on 8k+1 and 5s @25fps really means 121 frames / 4.84s.
+    length = snap_length(args.duration, args.fps)
+    duration = round(length / args.fps, 2)  # what the muxed file actually plays
+    if duration != args.duration:
+        print(f"note: {args.duration}s -> {duration}s ({length} frames; "
+              "LTX frame counts are 8k+1)")
     models = {
         "ckpt": args.ckpt,
         "text_encoder": args.text_encoder,
@@ -338,7 +355,7 @@ def main() -> None:
     if args.dump:
         graph = build_prompt(
             "PLACEHOLDER.png", positive=positive, negative=negative, width=width, height=height,
-            duration=args.duration, fps=args.fps, seed=seed, refine=refine,
+            duration=duration, fps=args.fps, seed=seed, refine=refine,
             filename_prefix=f"video/ltx23_i2v_{run_id}", models=models,
             distill_strength=args.distill_strength, img_compression=args.img_compression,
         )
@@ -370,13 +387,13 @@ def main() -> None:
     prefix = f"remote/ltx23_i2v_{run_id}"
     graph = build_prompt(
         up["name"], positive=positive, negative=negative, width=width, height=height,
-        duration=args.duration, fps=args.fps, seed=seed, refine=refine,
+        duration=duration, fps=args.fps, seed=seed, refine=refine,
         filename_prefix=prefix, models=models,
         distill_strength=args.distill_strength, img_compression=args.img_compression,
     )
 
     out_w, out_h = (width, height) if refine else (width // 2, height // 2)
-    print(f"[ltx23_i2v] {out_w}x{out_h} {args.duration}s @{args.fps}fps "
+    print(f"[ltx23_i2v] {out_w}x{out_h} {duration}s @{args.fps}fps "
           f"({length} frames, refine={'on' if refine else 'off'}) seed={seed}")
 
     meta: dict = {
@@ -388,7 +405,7 @@ def main() -> None:
         "negative_prompt": negative,
         "width": out_w,
         "height": out_h,
-        "duration_sec": args.duration,
+        "duration_sec": duration,
         "fps": args.fps,
         "length_frames": length,
         "refine": refine,
@@ -413,7 +430,7 @@ def main() -> None:
             if dest.suffix.lower() not in VIDEO_SUFFIXES:
                 dest = dest.with_suffix(".mp4")
         else:
-            dest = out_dir / f"ltx23_i2v_{out_w}x{out_h}_{args.duration}s_{stamp}.mp4"
+            dest = out_dir / f"ltx23_i2v_{out_w}x{out_h}_{duration}s_{stamp}.mp4"
         if dest.resolve() != primary.resolve():
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(primary.read_bytes())
