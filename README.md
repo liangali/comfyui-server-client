@@ -44,7 +44,7 @@ server\start_comfyui_remote.bat
 
 启动参数：`--listen 0.0.0.0 --port 8188 --disable-smart-memory`。
 
-终端会打印本机 IPv4，例如 `10.239.140.52`。**客户端要用这个局域网 IP**，不要用 `127.0.0.1`。
+终端会打印本机 IPv4，例如 `192.168.1.50`。**客户端要用这个局域网 IP**，不要用 `127.0.0.1`。
 
 本机可打开：http://127.0.0.1:8188
 
@@ -61,7 +61,7 @@ netsh advfirewall firewall add rule name="ComfyUI 8188" dir=in action=allow prot
 把 IP 换成 B70 的局域网地址：
 
 ```bat
-curl http://10.239.140.52:8188/system_stats
+curl http://192.168.1.50:8188/system_stats
 ```
 
 返回含 `devices` 的 JSON 即通。浏览器打开同一地址也应能看到 ComfyUI UI。
@@ -71,13 +71,13 @@ curl http://10.239.140.52:8188/system_stats
 若本机设置了 `http_proxy`（常见于公司环境），普通 `curl` 会走代理并可能返回 **403 HTML（Policy ID）**，看起来像“连不上”。请用：
 
 ```bat
-curl --noproxy "*" http://10.239.140.52:8188/system_stats
+curl --noproxy "*" http://192.168.1.50:8188/system_stats
 ```
 
 客户端 Python 脚本已强制直连、不走 `HTTP_PROXY`。也可把 B70 IP 加入 `no_proxy`：
 
 ```bat
-set no_proxy=%no_proxy%,10.239.140.52
+set no_proxy=%no_proxy%,192.168.1.50
 ```
 
 ---
@@ -98,10 +98,10 @@ python -c "import comfyui_remote_client; print('ok')"
 
 ```bat
 REM 方式 1：命令行（推荐）
-python run_qwen_image_remote.py --server 10.239.140.52:8188
+python run_qwen_image_remote.py --server 192.168.1.50:8188
 
 REM 方式 2：环境变量
-set COMFYUI_SERVER=10.239.140.52:8188
+set COMFYUI_SERVER=192.168.1.50:8188
 python run_qwen_image_remote.py
 ```
 
@@ -127,14 +127,14 @@ python run_qwen_image_remote.py
 cd /d D:\path\to\comfyui-server-client\client
 
 REM 冒烟（默认 1024x1024）
-python run_qwen_image_remote.py --server 10.239.140.52:8188
+python run_qwen_image_remote.py --server 192.168.1.50:8188
 
 REM 自定义
-python run_qwen_image_remote.py --server 10.239.140.52:8188 --prompt "cyberpunk rainy street guitarist, neon lights, cinematic" --width 1024 --height 1024 --seed 42 --output c:\data\qwen.png
+python run_qwen_image_remote.py --server 192.168.1.50:8188 --prompt "cyberpunk rainy street guitarist, neon lights, cinematic" --width 1024 --height 1024 --seed 42 --output c:\data\qwen.png
 
 REM 从文件读提示词 / 官方默认尺寸
-python run_qwen_image_remote.py --server 10.239.140.52:8188 --prompt-file prompt.txt --output out.png
-python run_qwen_image_remote.py --server 10.239.140.52:8188 --width 1328 --height 1328
+python run_qwen_image_remote.py --server 192.168.1.50:8188 --prompt-file prompt.txt --output out.png
+python run_qwen_image_remote.py --server 192.168.1.50:8188 --width 1328 --height 1328
 ```
 
 | 参数 | 说明 |
@@ -155,16 +155,16 @@ python run_qwen_image_remote.py --server 10.239.140.52:8188 --width 1328 --heigh
 cd /d D:\path\to\comfyui-server-client\client
 
 REM 14B I2V（最常用）：本地图上传 → 远端生成 → 下载 MP4
-python run_wan22_remote.py --server 10.239.140.52:8188 --only i2v --image c:\data\qwen.png --prompt "gentle camera push-in, soft wind, cinematic lighting" --width 640 --height 640 --duration 5 --output c:\data\qwen_i2v.mp4
+python run_wan22_remote.py --server 192.168.1.50:8188 --only i2v --image c:\data\qwen.png --prompt "gentle camera push-in, soft wind, cinematic lighting" --width 640 --height 640 --duration 5 --output c:\data\qwen_i2v.mp4
 
 REM 14B T2V（纯文生视频，不需要 --image）
-python run_wan22_remote.py --server 10.239.140.52:8188 --only t2v --output c:\data\t2v.mp4
+python run_wan22_remote.py --server 192.168.1.50:8188 --only t2v --output c:\data\t2v.mp4
 
 REM 5B TI2V
-python run_wan22_remote.py --server 10.239.140.52:8188 --only 5b --image c:\data\frame.png
+python run_wan22_remote.py --server 192.168.1.50:8188 --only 5b --image c:\data\frame.png
 
 REM 串行跑 5b + t2v + i2v（仍是一个接一个，不并发）
-python run_wan22_remote.py --server 10.239.140.52:8188 --only all --image c:\data\frame.png
+python run_wan22_remote.py --server 192.168.1.50:8188 --only all --image c:\data\frame.png
 ```
 
 | 参数 | 说明 |
@@ -188,7 +188,7 @@ python run_wan22_remote.py --server 10.239.140.52:8188 --only all --image c:\dat
 ```bat
 cd /d D:\path\to\comfyui-server-client\client
 
-python run_seedvr2_remote.py --server 10.239.140.52:8188 --video c:\data\qwen_i2v.mp4 --resolution 1080 --output c:\data\qwen_1080p.mp4
+python run_seedvr2_remote.py --server 192.168.1.50:8188 --video c:\data\qwen_i2v.mp4 --resolution 1080 --output c:\data\qwen_1080p.mp4
 ```
 
 | 参数 | 默认 | 说明 |
@@ -210,7 +210,7 @@ B70 上保持 `start_comfyui_remote.bat` 运行，客户端串行执行：
 
 ```bat
 cd /d D:\path\to\comfyui-server-client\client
-set SERVER=10.239.140.52:8188
+set SERVER=192.168.1.50:8188
 set OUT=D:\pipeline_out
 mkdir %OUT%
 
