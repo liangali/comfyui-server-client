@@ -155,20 +155,16 @@ python run_qwen_image_remote.py --server 10.239.140.52:8188 --width 1328 --heigh
 cd /d D:\path\to\comfyui-server-client\client
 
 REM 14B I2V（最常用）：本地图上传 → 远端生成 → 下载 MP4
-python run_wan22_remote.py --server 10.239.140.52:8188 --only i2v ^
-  --image D:\inputs\hero.png ^
-  --prompt "gentle camera push-in, soft wind, cinematic lighting" ^
-  --width 640 --height 640 --duration 5 ^
-  --output c:\data\hero_i2v.mp4
+python run_wan22_remote.py --server 10.239.140.52:8188 --only i2v --image c:\data\qwen.png --prompt "gentle camera push-in, soft wind, cinematic lighting" --width 640 --height 640 --duration 5 --output c:\data\qwen_i2v.mp4
 
 REM 14B T2V（纯文生视频，不需要 --image）
 python run_wan22_remote.py --server 10.239.140.52:8188 --only t2v --output c:\data\t2v.mp4
 
 REM 5B TI2V
-python run_wan22_remote.py --server 10.239.140.52:8188 --only 5b --image D:\inputs\frame.png
+python run_wan22_remote.py --server 10.239.140.52:8188 --only 5b --image c:\data\frame.png
 
 REM 串行跑 5b + t2v + i2v（仍是一个接一个，不并发）
-python run_wan22_remote.py --server 10.239.140.52:8188 --only all --image D:\inputs\frame.png
+python run_wan22_remote.py --server 10.239.140.52:8188 --only all --image c:\data\frame.png
 ```
 
 | 参数 | 说明 |
