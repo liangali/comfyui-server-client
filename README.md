@@ -188,10 +188,7 @@ python run_wan22_remote.py --server 10.239.140.52:8188 --only all --image c:\dat
 ```bat
 cd /d D:\path\to\comfyui-server-client\client
 
-python run_seedvr2_remote.py --server 10.239.140.52:8188 ^
-  --video c:\data\hero_i2v.mp4 ^
-  --resolution 1080 ^
-  --output c:\data\hero_1080p.mp4
+python run_seedvr2_remote.py --server 10.239.140.52:8188 --video c:\data\qwen_i2v.mp4 --resolution 1080 --output c:\data\qwen_1080p.mp4
 ```
 
 | 参数 | 默认 | 说明 |
